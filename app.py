@@ -5,34 +5,19 @@ import re
 import math
 
 # --- 頁面基本設定 ---
-# 佈局改為 centered，營造簡潔的卡片感
 st.set_page_config(page_title="HK小學數學練習器", page_icon="🎓", layout="centered")
 
 # --- 注入自訂 CSS 來美化版面 ---
 st.markdown("""
 <style>
-    /* 將主視窗寬度縮窄，營造卡片感 */
     .block-container {
         max-width: 650px;
         padding-top: 3rem;
         padding-bottom: 3rem;
     }
-    
-    /* 隱藏上方預設的 Streamlit 選單和部署按鈕 */
     #MainMenu {visibility: hidden;}
     header {visibility: hidden;}
     
-    /* 題目大字體置中 */
-    .big-question {
-        font-size: 3.5rem;
-        font-weight: bold;
-        text-align: center;
-        margin-top: 20px;
-        margin-bottom: 30px;
-        color: #333333;
-    }
-    
-    /* 自訂綠色大按鈕 */
     div[data-testid="stFormSubmitButton"] > button {
         background-color: #327d3b;
         color: white;
@@ -43,13 +28,10 @@ st.markdown("""
         width: 100%;
         border: none;
     }
-    
     div[data-testid="stFormSubmitButton"] > button:hover {
         background-color: #26602d;
         color: white;
     }
-    
-    /* 輸入框內的文字置中放大 */
     .stTextInput>div>div>input {
         text-align: center;
         font-size: 1.5rem;
@@ -81,11 +63,24 @@ def fmt_decimal(val):
 def get_lcm(a, b):
     return abs(a * b) // math.gcd(a, b)
 
+def to_latex(q_str):
+    """將題目字串轉換為 LaTeX 語法，以漂亮地顯示分數與乘除號"""
+    s = str(q_str)
+    # 將 a/b 轉換為 LaTeX 的 \frac{a}{b}
+    s = re.sub(r'(\d+)/(\d+)', r'\\frac{\1}{\2}', s)
+    # 替換乘除號為標準數學符號
+    s = s.replace('×', r'\times ').replace('÷', r'\div ')
+    return s
+
 # ==========================================
 # 2. 各年級題目生成邏輯 (Topic Generators)
 # ==========================================
 # --- 小一 ---
-def hks1_1(): return f"{random.randint(1, 9)} + {random.randint(1, 9)}", random.randint(1, 9) + random.randint(1, 9)
+def hks1_1():
+    # 修復 1+3=5 的 Bug：先固定變數！
+    a, b = random.randint(1, 9), random.randint(1, 9)
+    return f"{a} + {b}", a + b
+
 def hks1_2():
     a = random.randint(1, 18); b = random.randint(1, min(a, 9))
     return f"{a} - {b}", a - b
@@ -156,7 +151,7 @@ def hks3_7():
     return f"{a}/{d} - {b}/{d}", f"{a-b}/{d}"
 
 # ==========================================
-# 3. 模組化課程與映射配置 (Curriculum Mapping)
+# 3. 模組化課程與映射配置
 # ==========================================
 MAP_S1 = {"一位數加法": hks1_1, "減法": hks1_2, "兩位數加法": hks1_3, "三個數的加法": hks1_4, "兩位數減法": hks1_5}
 MAP_S2 = {"三個數的加法": hks2_1, "兩位數減法": hks2_2, "三個數的減法": hks2_3, "基本乘法": hks2_4, "三位數減法": hks2_5, "三個數的加減混合": hks2_6, "貨幣運算": hks2_7, "基本除法": hks2_8}
@@ -165,7 +160,7 @@ MAP_S3 = {"乘法(兩位數 × 一位數)": hks3_1, "乘法(三位數 × 一位�
 CURRICULUM_MAP = {"小一": MAP_S1, "小二": MAP_S2, "小三": MAP_S3}
 
 # ==========================================
-# 4. 初始化狀態 (Session State)
+# 4. 初始化狀態
 # ==========================================
 if 'current_q' not in st.session_state:
     st.session_state.update({
@@ -174,7 +169,7 @@ if 'current_q' not in st.session_state:
     })
 
 # ==========================================
-# 5. 主程式介面 (Main UI)
+# 5. 主程式介面
 # ==========================================
 st.markdown("<h2 style='text-align: center; color: #206ec5;'>🎓 數學練習器</h2>", unsafe_allow_html=True)
 
@@ -185,7 +180,6 @@ with col1:
 with col2:
     topic = st.selectbox("課題", list(CURRICULUM_MAP[grade].keys()), label_visibility="collapsed")
 
-# 邏輯判斷：若切換課題或尚未出題，自動產生新題目
 if st.session_state.current_grade != grade or st.session_state.current_topic != topic or st.session_state.current_q == "":
     q, a = CURRICULUM_MAP[grade][topic]()
     st.session_state.update({
@@ -194,54 +188,88 @@ if st.session_state.current_grade != grade or st.session_state.current_topic != 
         'has_submitted': False, 'q_counter': st.session_state.q_counter + 1
     })
 
-# 顯示大題目
+# --- 顯示題目 (導入 LaTeX 以漂亮地顯示分數) ---
 display_q = st.session_state.current_q
 if "?" not in display_q: display_q = f"{display_q} = ?"
-st.markdown(f'<div class="big-question">{display_q}</div>', unsafe_allow_html=True)
 
-# 答題與提交區塊
+# 使用 st.latex 渲染，\Huge 可以放大字體
+st.latex(r"\Huge " + to_latex(display_q))
+
+st.write("") # 增加一點間距
+
+# --- 答題與提交區塊 ---
 is_money_q = (st.session_state.current_topic == "貨幣運算")
+is_fraction_q = ("分數" in st.session_state.current_topic) # 偵測是否為分數題型
 
 with st.form(key=f"ans_form_{st.session_state.q_counter}", clear_on_submit=False):
+    
     if is_money_q:
         st.caption("💡 提示：若答案為 0 角，可不填")
         mc1, mc2 = st.columns(2)
         u_yuan = mc1.number_input("元", min_value=0, step=1, value=None, key=f"yuan_{st.session_state.q_counter}")
         u_jiao = mc2.number_input("角", min_value=0, max_value=9, step=1, value=None, key=f"jiao_{st.session_state.q_counter}")
+    
+    elif is_fraction_q:
+        # 提供兩個方格讓學生填寫分子與分母
+        st.caption("💡 提示：左方填寫分子，右方填寫分母（若答案為整數 1，只需在左方填寫 1 即可）")
+        fc1, fc2, fc3 = st.columns([2, 1, 2])
+        u_num = fc1.number_input("分子", step=1, value=None, key=f"num_{st.session_state.q_counter}", label_visibility="collapsed")
+        fc2.markdown("<h2 style='text-align: center; margin-top: -10px; color: gray;'>/</h2>", unsafe_allow_html=True)
+        u_den = fc3.number_input("分母", step=1, value=None, key=f"den_{st.session_state.q_counter}", label_visibility="collapsed")
+        
     else:
-        st.caption("💡 格式提示：\n- 分數：(分子)/(分母) 如 `3/4`\n- 帶分數：整數與分數間加空格 如 `1 2/3`\n- 餘數：使用 `...` 如 `10...2`")
+        st.caption("💡 格式提示：若是餘數請使用 `...` 如 `10...2`")
         u_input = st.text_input("輸入答案", placeholder="輸入數字", label_visibility="collapsed", key=f"input_{st.session_state.q_counter}")
     
-    # 按鈕動態文字
     btn_text = "下一題 ➡️" if st.session_state.has_submitted else "提交答案"
     submit_btn = st.form_submit_button(btn_text)
     
     if submit_btn:
         if not st.session_state.has_submitted:
-            # === 驗證答案邏輯 ===
             correct = False
-            user_ans_raw = str(u_input).strip() if not is_money_q else ""
             standard_ans = str(st.session_state.current_ans)
 
+            # === 貨幣驗證 ===
             if is_money_q:
                 val_y = u_yuan if u_yuan is not None else 0
                 val_j = u_jiao if u_jiao is not None else 0
                 if (val_y * 10 + val_j) == st.session_state.current_ans: correct = True
                 ans_str = format_money(st.session_state.current_ans)
+            
+            # === 分數雙輸入框驗證 ===
+            elif is_fraction_q:
+                n = u_num if u_num is not None else ""
+                d = u_den if u_den is not None else ""
+                
+                # 組合學生的答案字串
+                if d == "" and n != "": 
+                    user_ans_raw = str(int(n)) # 只填分子視為整數
+                elif d != "" and n != "":
+                    user_ans_raw = f"{int(n)}/{int(d)}" # 假分數或真分數
+                else:
+                    user_ans_raw = ""
+
+                try:
+                    # 使用原本強大的 Fraction 函數來驗證
+                    if parse_mixed_fraction(user_ans_raw) == parse_mixed_fraction(standard_ans):
+                        correct = True
+                except:
+                    correct = False
+                ans_str = standard_ans
+
+            # === 一般文字/數字驗證 ===
             else:
-                if standard_ans == "1": correct = (user_ans_raw == "1")
-                elif "/" in standard_ans or "/" in user_ans_raw:
-                    try:
-                        if parse_mixed_fraction(user_ans_raw) == parse_mixed_fraction(standard_ans): correct = True
-                    except: pass
-                elif "..." in standard_ans: correct = (user_ans_raw.replace(" ", "") == standard_ans.replace(" ", ""))
+                user_ans_raw = str(u_input).strip()
+                if "..." in standard_ans: 
+                    correct = (user_ans_raw.replace(" ", "") == standard_ans.replace(" ", ""))
                 else:
                     try:
                         if float(user_ans_raw) == float(standard_ans): correct = True
-                    except: correct = (user_ans_raw == standard_ans)
+                    except: 
+                        correct = (user_ans_raw == standard_ans)
                 ans_str = standard_ans
 
-            # === 紀錄分數與回饋 ===
+            # 紀錄分數與回饋
             if correct:
                 st.session_state.feedback = "✅ 答對了！"
                 st.session_state.score += 1
@@ -250,16 +278,15 @@ with st.form(key=f"ans_form_{st.session_state.q_counter}", clear_on_submit=False
             
             st.session_state.total += 1
             st.session_state.has_submitted = True
-            st.rerun() # 重新整理畫面顯示結果
+            st.rerun() 
             
         else:
-            # === 產生下一題邏輯 ===
             q, a = CURRICULUM_MAP[grade][topic]()
             st.session_state.update({
                 'current_q': q, 'current_ans': a, 'feedback': "", 
                 'has_submitted': False, 'q_counter': st.session_state.q_counter + 1
             })
-            st.rerun() # 重新整理畫面顯示新題目
+            st.rerun()
 
 # 顯示回饋與計分板
 if st.session_state.feedback:
