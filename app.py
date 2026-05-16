@@ -18,6 +18,7 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     header {visibility: hidden;}
     
+    /* 自訂按鈕樣式 */
     div[data-testid="stFormSubmitButton"] > button {
         background-color: #327d3b;
         color: white;
@@ -32,7 +33,21 @@ st.markdown("""
         background-color: #26602d;
         color: white;
     }
+    
+    /* 讓所有輸入框文字置中且放大 */
     .stTextInput>div>div>input {
+        text-align: center;
+        font-size: 1.5rem;
+    }
+    
+    /* 隱藏數字輸入框右側的上下小箭頭，讓畫面更像紙本填空 */
+    input[type="number"]::-webkit-outer-spin-button,
+    input[type="number"]::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+    input[type="number"] {
+        -moz-appearance: textfield;
         text-align: center;
         font-size: 1.5rem;
     }
@@ -40,7 +55,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 1. 核心工具函數 (Utility Functions)
+# 1. 核心工具函數
 # ==========================================
 def format_money(cents):
     y = cents // 10
@@ -64,23 +79,17 @@ def get_lcm(a, b):
     return abs(a * b) // math.gcd(a, b)
 
 def to_latex(q_str):
-    """將題目字串轉換為 LaTeX 語法，以漂亮地顯示分數與乘除號"""
     s = str(q_str)
-    # 將 a/b 轉換為 LaTeX 的 \frac{a}{b}
     s = re.sub(r'(\d+)/(\d+)', r'\\frac{\1}{\2}', s)
-    # 替換乘除號為標準數學符號
     s = s.replace('×', r'\times ').replace('÷', r'\div ')
     return s
 
 # ==========================================
-# 2. 各年級題目生成邏輯 (Topic Generators)
+# 2. 各年級題目生成邏輯
 # ==========================================
-# --- 小一 ---
 def hks1_1():
-    # 修復 1+3=5 的 Bug：先固定變數！
     a, b = random.randint(1, 9), random.randint(1, 9)
     return f"{a} + {b}", a + b
-
 def hks1_2():
     a = random.randint(1, 18); b = random.randint(1, min(a, 9))
     return f"{a} - {b}", a - b
@@ -94,7 +103,6 @@ def hks1_5():
     a = random.randint(10, 99); b = random.randint(1, a)
     return f"{a} - {b}", a - b
 
-# --- 小二 ---
 def hks2_1():
     res = random.randint(100, 999); a, b = random.randint(10, 400), random.randint(10, 400)
     return f"{a} + {b} + {res-a-b}", res
@@ -120,7 +128,6 @@ def hks2_8():
     ans, b = random.randint(1, 10), random.randint(1, 10)
     return f"{ans * b} ÷ {b}", ans
 
-# --- 小三 ---
 def hks3_1():
     a, b = random.randint(10, 99), random.randint(2, 9)
     return f"{a} × {b}", a * b
@@ -151,7 +158,7 @@ def hks3_7():
     return f"{a}/{d} - {b}/{d}", f"{a-b}/{d}"
 
 # ==========================================
-# 3. 模組化課程與映射配置
+# 3. 模組化課程配置
 # ==========================================
 MAP_S1 = {"一位數加法": hks1_1, "減法": hks1_2, "兩位數加法": hks1_3, "三個數的加法": hks1_4, "兩位數減法": hks1_5}
 MAP_S2 = {"三個數的加法": hks2_1, "兩位數減法": hks2_2, "三個數的減法": hks2_3, "基本乘法": hks2_4, "三位數減法": hks2_5, "三個數的加減混合": hks2_6, "貨幣運算": hks2_7, "基本除法": hks2_8}
@@ -173,7 +180,6 @@ if 'current_q' not in st.session_state:
 # ==========================================
 st.markdown("<h2 style='text-align: center; color: #206ec5;'>🎓 數學練習器</h2>", unsafe_allow_html=True)
 
-# 頂部下拉選單
 col1, col2 = st.columns(2)
 with col1:
     grade = st.selectbox("年級", list(CURRICULUM_MAP.keys()), label_visibility="collapsed")
@@ -188,18 +194,15 @@ if st.session_state.current_grade != grade or st.session_state.current_topic != 
         'has_submitted': False, 'q_counter': st.session_state.q_counter + 1
     })
 
-# --- 顯示題目 (導入 LaTeX 以漂亮地顯示分數) ---
 display_q = st.session_state.current_q
 if "?" not in display_q: display_q = f"{display_q} = ?"
 
-# 使用 st.latex 渲染，\Huge 可以放大字體
 st.latex(r"\Huge " + to_latex(display_q))
-
-st.write("") # 增加一點間距
+st.write("") 
 
 # --- 答題與提交區塊 ---
 is_money_q = (st.session_state.current_topic == "貨幣運算")
-is_fraction_q = ("分數" in st.session_state.current_topic) # 偵測是否為分數題型
+is_fraction_q = ("分數" in st.session_state.current_topic)
 
 with st.form(key=f"ans_form_{st.session_state.q_counter}", clear_on_submit=False):
     
@@ -210,13 +213,19 @@ with st.form(key=f"ans_form_{st.session_state.q_counter}", clear_on_submit=False
         u_jiao = mc2.number_input("角", min_value=0, max_value=9, step=1, value=None, key=f"jiao_{st.session_state.q_counter}")
     
     elif is_fraction_q:
-        # 提供兩個方格讓學生填寫分子與分母
-        st.caption("💡 提示：左方填寫分子，右方填寫分母（若答案為整數 1，只需在左方填寫 1 即可）")
-        fc1, fc2, fc3 = st.columns([2, 1, 2])
-        u_num = fc1.number_input("分子", step=1, value=None, key=f"num_{st.session_state.q_counter}", label_visibility="collapsed")
-        fc2.markdown("<h2 style='text-align: center; margin-top: -10px; color: gray;'>/</h2>", unsafe_allow_html=True)
-        u_den = fc3.number_input("分母", step=1, value=None, key=f"den_{st.session_state.q_counter}", label_visibility="collapsed")
-        
+        st.caption("💡 提示：請在左側填寫分子與分母。若答案可化簡為整數 1，請在右方化簡格內填寫 1。")
+        fc1, fc2, fc3, fc4, fc5 = st.columns([1, 1.5, 0.5, 1.5, 1])
+        with fc2:
+            u_num = st.number_input("分子", step=1, value=None, key=f"num_{st.session_state.q_counter}", label_visibility="collapsed")
+            # 使用黑色橫線打造直式分數質感
+            st.markdown("<hr style='margin: 0; padding: 0; border-top: 3px solid #333;'>", unsafe_allow_html=True)
+            u_den = st.number_input("分母", step=1, value=None, key=f"den_{st.session_state.q_counter}", label_visibility="collapsed")
+        with fc3:
+            st.markdown("<div style='font-size: 2.5rem; font-weight: bold; text-align: center; margin-top: 15px;'>=</div>", unsafe_allow_html=True)
+        with fc4:
+            st.markdown("<div style='height: 30px;'></div>", unsafe_allow_html=True)
+            u_final = st.text_input("化簡", placeholder="化簡(若適用)", label_visibility="collapsed", key=f"fin_{st.session_state.q_counter}")
+            
     else:
         st.caption("💡 格式提示：若是餘數請使用 `...` 如 `10...2`")
         u_input = st.text_input("輸入答案", placeholder="輸入數字", label_visibility="collapsed", key=f"input_{st.session_state.q_counter}")
@@ -236,26 +245,36 @@ with st.form(key=f"ans_form_{st.session_state.q_counter}", clear_on_submit=False
                 if (val_y * 10 + val_j) == st.session_state.current_ans: correct = True
                 ans_str = format_money(st.session_state.current_ans)
             
-            # === 分數雙輸入框驗證 ===
+            # === 全新：直式分數驗證邏輯 ===
             elif is_fraction_q:
-                n = u_num if u_num is not None else ""
-                d = u_den if u_den is not None else ""
+                n = u_num
+                d = u_den
+                f = str(u_final).strip() if u_final else ""
                 
-                # 組合學生的答案字串
-                if d == "" and n != "": 
-                    user_ans_raw = str(int(n)) # 只填分子視為整數
-                elif d != "" and n != "":
-                    user_ans_raw = f"{int(n)}/{int(d)}" # 假分數或真分數
-                else:
-                    user_ans_raw = ""
-
-                try:
-                    # 使用原本強大的 Fraction 函數來驗證
-                    if parse_mixed_fraction(user_ans_raw) == parse_mixed_fraction(standard_ans):
+                # 情境 1：答案等於 1 (強制按步驟輸入 n/d = 1)
+                if standard_ans == "1":
+                    # 從原始題目中尋找分母
+                    match = re.search(r'/(\d+)', st.session_state.current_q)
+                    expected_d = int(match.group(1)) if match else 1
+                    
+                    if n == expected_d and d == expected_d and f == "1":
                         correct = True
-                except:
-                    correct = False
-                ans_str = standard_ans
+                    else:
+                        correct = False
+                    ans_str = f"{expected_d}/{expected_d} = 1"
+                    
+                # 情境 2：答案為一般分數 (如 5/12)
+                else:
+                    try:
+                        expected_n, expected_d = map(int, standard_ans.split("/"))
+                        # 確認分子分母填寫正確，且化簡格留白(或填一樣)才算對
+                        if n == expected_n and d == expected_d and (f == "" or f == standard_ans):
+                            correct = True
+                        else:
+                            correct = False
+                    except:
+                        correct = False
+                    ans_str = standard_ans
 
             # === 一般文字/數字驗證 ===
             else:
